@@ -1,0 +1,70 @@
+# Node.js / Frontend
+node_modules/
+dist/
+dist-ssr/
+build/
+.eslintcache
+.vite/
+.next/
+.cache/
+
+# Python / Django Backend
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+*.sqlite3-journal
+media/
+*.egg-info/
+*.egg
+
+# Docker
+postgres_data/
+
+# Environment Variables
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+coverage/
+coverage.xml
+htmlcov/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Gemini AI
+.gemini/

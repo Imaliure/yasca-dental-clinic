@@ -1,0 +1,343 @@
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from datetime import time
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+
+
+class CustomUser(AbstractUser):
+    """Klinik personeli: Admin, Hekim veya Asistan."""
+
+    class Role(models.TextChoices):
+        ADMIN = "admin", "Yönetici"
+        DOCTOR = "doctor", "Hekim"
+        ASSISTANT = "assistant", "Asistan"
+
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.ASSISTANT,
+    )
+
+
+    class Meta:
+        verbose_name = "Kullanıcı"
+        verbose_name_plural = "Kullanıcılar"
+
+    def __str__(self):
+        return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
+
+    def get_role_display(self):
+        return dict(self.Role.choices).get(self.role, self.role)
+
+    @property
+    def is_hekim(self):
+        return self.role == self.Role.DOCTOR
+
+    @property
+    def is_asistan(self):
+        return self.role == self.Role.ASSISTANT
+
+    @property
+    def is_yonetici(self):
+        return self.role == self.Role.ADMIN or self.is_superuser
+
+
+class Patient(models.Model):
+    """Hasta kaydı. F-003: Ad, Soyad, Telefon zorunlu; TC ve Doğum Tarihi opsiyonel."""
+    
+
+
+    first_name = models.CharField("Ad", max_length=100)
+    last_name = models.CharField("Soyad", max_length=100)
+    phone = models.CharField("Telefon", max_length=20)
+    tckn = models.CharField("TC Kimlik No", max_length=11, null=True, blank=True)
+    birth_date = models.DateField("Doğum Tarihi", null=True, blank=True)
+    address = models.TextField("Adres", blank=True)
+    notes = models.TextField("Notlar", blank=True)
+    is_active = models.BooleanField("Aktif", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Hasta"
+        verbose_name_plural = "Hastalar"
+        ordering = ["last_name", "first_name"]
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class Anamnesis(models.Model):
+    """Hasta anamnezi. Patient ile 1-1 ilişki."""
+
+    patient = models.OneToOneField(
+        Patient, on_delete=models.CASCADE, related_name="anamnesis"
+    )
+    medical_history = models.TextField("Tıbbi Geçmiş", blank=True)
+    allergies = models.TextField("Alerjiler", blank=True)
+    medications = models.TextField("Kullandığı İlaçlar", blank=True)
+    chronic_diseases = models.TextField("Kronik Hastalıklar", blank=True)
+    surgical_history = models.TextField("Geçirdiği Ameliyatlar", blank=True)
+    family_history = models.TextField("Aile Öyküsü", blank=True)
+    smoking = models.CharField("Sigara", max_length=100, blank=True)
+    alcohol = models.CharField("Alkol", max_length=100, blank=True)
+    pregnancy_status = models.CharField("Gebelik Durumu", max_length=100, blank=True)
+    other_notes = models.TextField("Diğer Notlar", blank=True)
+
+    class Meta:
+        verbose_name = "Anamnez"
+        verbose_name_plural = "Anamnezler"
+
+    def __str__(self):
+        return f"Anamnez: {self.patient}"
+
+
+class TreatmentType(models.Model):
+    """Tedavi türleri ve varsayılan fiyatları. F-020."""
+
+    class Category(models.TextChoices):
+        FILLING = "filling", "Dolgu"
+        CANAL = "canal", "Kanal Tedavisi"
+        CROWN = "crown", "Kron / Kaplama"
+        EXTRACTION = "extraction", "Diş Çekimi"
+        IMPLANT = "implant", "İmplant"
+        DETARTRAJ = "detartraj", "Diş Taşı Temizliği"
+        OTHER = "other", "Diğer"
+
+    doctor = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="treatment_types",
+        verbose_name="Hekim",
+    )
+
+    name = models.CharField("Tedavi Türü", max_length=100)
+    category = models.CharField(
+        "Kategori",
+        max_length=20,
+        choices=Category.choices,
+        default=Category.OTHER,
+    )
+    default_price = models.DecimalField(
+        "Varsayılan Fiyat", max_digits=10, decimal_places=2, default=0
+    )
+    is_active = models.BooleanField("Aktif", default=True)
+
+    class Meta:
+        verbose_name = "Tedavi Türü"
+        verbose_name_plural = "Tedavi Türleri"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Appointment(models.Model):
+    """Randevu kaydı. F-006, F-007, F-008, F-009, F-019."""
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Planlandı"
+        COMPLETED = "completed", "Tamamlandı"
+        CANCELLED = "cancelled", "İptal"
+        NO_SHOW = "no_show", "Gelmedi"
+        
+
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="appointments"
+    )
+    doctor = models.ForeignKey(
+        CustomUser, on_delete=models.PROTECT, related_name="appointments"
+    )
+    date = models.DateField("Tarih")
+    time = models.TimeField("Saat")
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.SCHEDULED
+    )
+    notes = models.TextField("Notlar", blank=True)
+    treatment = models.ForeignKey(
+        'Treatment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments",
+        verbose_name="İşlem"
+    )
+    is_active = models.BooleanField("Aktif", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Randevu"
+        verbose_name_plural = "Randevular"
+        ordering = ["date", "time"]
+
+    def __str__(self):
+        return f"{self.patient} - {self.date} {self.time}"
+
+
+class Treatment(models.Model):
+    """Tedavi kaydı. F-010, F-011, F-018."""
+
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Yapılacak"
+        COMPLETED = "completed", "Tamamlanmış"
+        
+
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="treatments"
+    )
+    doctor = models.ForeignKey(
+        CustomUser, on_delete=models.PROTECT, related_name="treatments"
+    )
+    treatment_type = models.ForeignKey(
+        TreatmentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="treatments",
+    )
+    treatment_name = models.CharField("İşlem Adı", max_length=200, blank=True)
+    tooth_number = models.CharField("Diş No (FDI)", max_length=10, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.COMPLETED
+    )
+    notes = models.TextField("Notlar", blank=True)
+    date = models.DateField("Tarih")
+    price = models.DecimalField("Uygulanan Fiyat", max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField("Aktif", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Tedavi"
+        verbose_name_plural = "Tedaviler"
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        name = self.treatment_type.name if self.treatment_type else self.treatment_name
+        return f"{self.patient} - {name} ({self.date})"
+
+
+class ClinicSettings(models.Model):
+    """Klinik ayarları. F-022."""
+
+
+    work_start_time = models.TimeField("Çalışma Başlangıç", default=time(9, 0))
+    work_end_time = models.TimeField("Çalışma Bitiş", default=time(18, 0))
+    work_days = models.JSONField(
+        "Çalışılabilecek Günler", 
+        default=list,
+        blank=True,
+        help_text="Örn: 1,2,3,4,5,6 (1=Pzt, 0=Paz)"
+    )
+    allow_international_numbers = models.BooleanField("Uluslararası Numaralara İzin Ver", default=False)
+    default_country = models.CharField(
+        "Varsayılan Ülke", 
+        max_length=2, 
+        choices=[('TR', 'Türkiye')], 
+        default='TR'
+    )
+
+    class Meta:
+        verbose_name = "Klinik Ayarı"
+        verbose_name_plural = "Klinik Ayarları"
+
+    def __str__(self):
+        return "Klinik Ayarları"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+
+class Payment(models.Model):
+    """Ödeme kaydı. F-014, F-015."""
+    
+
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="payments"
+    )
+    treatment = models.ForeignKey(
+        Treatment, on_delete=models.SET_NULL, null=True, blank=True, related_name="payments"
+    )
+    amount = models.DecimalField("Tutar", max_digits=10, decimal_places=2)
+    description = models.CharField("Açıklama", max_length=255, blank=True)
+    payment_date = models.DateField("Ödeme Tarihi")
+    is_active = models.BooleanField("Aktif", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Ödeme"
+        verbose_name_plural = "Ödemeler"
+        ordering = ["-payment_date"]
+
+    def __str__(self):
+        return f"{self.patient} - {self.amount} TL ({self.payment_date})"
+
+def patient_directory_path(instance, filename):
+    return 'patients/patient_{0}/{1}'.format(instance.patient.id, filename)
+
+class Document(models.Model):
+    """Hasta dosya ve dokümanları."""
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="documents"
+    )
+    name = models.CharField("Doküman Adı", max_length=255)
+    file = models.FileField("Dosya", upload_to=patient_directory_path)
+    uploaded_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    is_active = models.BooleanField("Aktif", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Doküman"
+        verbose_name_plural = "Dokümanlar"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.patient.full_name})"
+
+
+class AuditLog(models.Model):
+    """Kullanıcı işlem geçmişini (Audit Trail) tutan model. KVKK ve güvenlik için kritik."""
+
+    class Action(models.TextChoices):
+        CREATE = "CREATE", "Oluşturma"
+        UPDATE = "UPDATE", "Güncelleme"
+        DELETE = "DELETE", "Silme"
+    
+    user = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Kullanıcı")
+    action = models.CharField("İşlem Tipi", max_length=10, choices=Action.choices)
+    
+    # Hangi model üzerinde işlem yapıldı (Hasta, Randevu, vs.)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    # Değişiklik detayları (Eski değer -> Yeni değer)
+    changes = models.JSONField("Değişiklikler", null=True, blank=True)
+    ip_address = models.GenericIPAddressField("IP Adresi", null=True, blank=True)
+    created_at = models.DateTimeField("İşlem Tarihi", auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "İşlem Logu"
+        verbose_name_plural = "İşlem Logları"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        username = self.user.get_full_name() or self.user.username if self.user else "Sistem"
+        return f"{username} | {self.get_action_display()} | {self.content_type.model} #{self.object_id} | {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
