@@ -18,7 +18,7 @@ if (HOSTNAME.endsWith('localhost') || HOSTNAME === '127.0.0.1') {
   API_BASE = `http://${HOSTNAME}:8000/api`;
 } else {
   // Canlı ortam - Tüm istekler tek Render URL'ine gider
-  API_BASE = 'https://yasca-dental-clinic-z4ov.onrender.com/api';
+  API_BASE = 'https://yasca-dental-clinic-oj5s.onrender.com/api';
 }
 
 /**
